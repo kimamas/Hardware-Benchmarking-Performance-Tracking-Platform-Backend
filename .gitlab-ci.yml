@@ -1,0 +1,67 @@
+image: gradle:8.2.0-jdk17-jammy
+
+stages:
+  - build
+  - test
+  - sonarqube
+  - deploy
+
+variables:
+  SPRING_DATASOURCE_URL: jdbc:h2:mem:testdb
+  SPRING_DATASOURCE_USERNAME: sa
+  SPRING_DATASOURCE_PASSWORD: password
+#  example JWT
+  JWT_SECRET: T3xj2v5ReH1GcZ0Z6G48i3ZrVnO9lKp7k2p5t1d3s8b0q4f9u7v1e4j6m9y2n3o5=
+  GRADLE_OPTS: "-Dog.gradle.daemon=false"
+  SONAR_USER_HOME: "${CI_PROJECT_DIR}/.sonar"
+  GIT_DEPTH: 0
+  DOCKER_TAG: $CI_COMMIT_SHA
+
+cache:
+  key: ${CI_COMMIT_REF_SLUG}
+  paths:
+    - .gradle/
+
+before_script:
+  - echo "spring.datasource.url=${SPRING_DATASOURCE_URL}" > src/main/resources/application.properties
+  - echo "spring.datasource.username=${SPRING_DATASOURCE_USERNAME}" >> src/main/resources/application.properties
+  - echo "spring.datasource.password=${SPRING_DATASOURCE_PASSWORD}" >> src/main/resources/application.properties
+  - echo "spring.jpa.hibernate.ddl-auto=none" >> src/main/resources/application.properties
+  - echo "spring.flyway.enabled=false" >> src/main/resources/application.properties
+  - echo "jwt.secret=${JWT_SECRET}" >> src/main/resources/application.properties
+
+
+build_backend:
+  stage: build
+  script:
+    - ./gradlew build --no-daemon
+  artifacts:
+    paths:
+      - build/libs/*.jar
+
+
+test_backend:
+  stage: test
+  script:
+    - ./gradlew test
+
+sonarqube-check:
+  stage: sonarqube
+
+  script:
+    - ./gradlew build --no-daemon
+    - ./gradlew sonarqube --info --stacktrace
+  rules:
+  - if: $CI_COMMIT_BRANCH =~ /^(main|master|developing|release\/.+)$/
+
+
+#deploy_backend:
+#  stage: deploy
+#  script:
+#    - echo $DOCKER_PASSWORD | docker login -u $DOCKER_USER --password-stdin
+#    - docker tag internet-benchmark-backend $DOCKER_USER/internet-benchmark-backend:$DOCKER_TAG
+#    - docker push $DOCKER_USER/internet-benchmark-backend:$DOCKER_TAG
+#    - docker push $DOCKER_USER/internet-benchmark-backend:latest
+#  only:
+#    - main
+#    - developing
